@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Shield, Activity, Clock, Zap, AlertTriangle } from 'lucide-react';
 import { StatusBadge } from '../common/StatusBadge';
 
-export function Header({ meta, examStatus, riskScore, activeScenarioName, isTransitioning }) {
+export function Header({ meta, examStatus, riskScore, activeScenarioName, isTransitioning, user, onLogout, isLive }) {
   const [timeStr, setTimeStr] = useState('');
 
   useEffect(() => {
@@ -36,7 +36,7 @@ export function Header({ meta, examStatus, riskScore, activeScenarioName, isTran
                   EXAMSHIELD AI
                 </h1>
                 <span className="text-xs px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/80 font-mono font-semibold">
-                  v1.0 FRONTEND DEMO
+                  {isLive ? 'LIVE BACKEND' : 'DEMO MODE'}
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-medium tracking-wide">
@@ -75,6 +75,7 @@ export function Header({ meta, examStatus, riskScore, activeScenarioName, isTran
               <Clock className="w-3.5 h-3.5 text-cyan-400" />
               <span>{timeStr || '10:32:45'}</span>
             </div>
+            {user && <div className="flex items-center gap-2 text-xs text-slate-300"><span>{user.displayName || user.email}</span><button onClick={onLogout} className="rounded border border-slate-700 px-2.5 py-1.5 hover:border-cyan-500 hover:text-white">Sign out</button></div>}
           </div>
 
         </div>

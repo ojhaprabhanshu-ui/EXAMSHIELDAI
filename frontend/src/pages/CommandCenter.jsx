@@ -11,8 +11,10 @@ import { IncidentTimeline } from '../components/incidents/IncidentTimeline';
 import { SessionDrillDownModal } from '../components/sessions/SessionDrillDownModal';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { AlertOctagon, ShieldAlert } from 'lucide-react';
+import { useState } from 'react';
+import { apiRequest } from '../services/apiClient';
 
-export function CommandCenter() {
+export function CommandCenter({ user, accessToken, onLogout }) {
   const {
     meta,
     scenarioKey,
@@ -24,7 +26,25 @@ export function CommandCenter() {
     triggerScenario,
     openSessionDrillDown,
     closeSessionDrillDown,
-  } = useExamSimulation();
+    isLive,
+    retry,
+  } = useExamSimulation(accessToken);
+  const [setupBusy, setSetupBusy] = useState(false);
+  const [setupError, setSetupError] = useState('');
+
+  async function createFirstExam(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setSetupBusy(true); setSetupError('');
+    try {
+      await apiRequest('/exams', { method: 'POST', body: JSON.stringify({
+        title: form.get('title'), startsAt: new Date(form.get('startsAt')).toISOString(),
+        endsAt: new Date(form.get('endsAt')).toISOString(), durationSeconds: Number(form.get('durationMinutes')) * 60,
+      }) });
+      await retry();
+    } catch (err) { setSetupError(err.message); }
+    finally { setSetupBusy(false); }
+  }
 
   if (isLoading && !examState) {
     return (
@@ -35,6 +55,10 @@ export function CommandCenter() {
   }
 
   if (error) {
+    if (error.includes('NO_EXAMS') || error.toLowerCase().includes('no scheduled or active exams')) {
+      const canCreate = ['Admin', 'Examiner'].includes(user?.role);
+      return <div className="min-h-screen bg-slate-950 text-slate-100"><Header meta={{ title: 'Exam setup', semester: 'Backend' }} user={user} onLogout={onLogout} isLive={false} examStatus="SCHEDULED" riskScore={0} /><main className="mx-auto mt-14 max-w-xl rounded-xl border border-slate-800 bg-slate-900 p-6"><h2 className="text-xl font-bold">No exam is available yet</h2><p className="mt-2 text-sm text-slate-400">{canCreate ? 'Create the first exam to populate the live Command Center.' : 'Ask an Admin or Examiner to create a scheduled exam.'}</p>{canCreate && <form onSubmit={createFirstExam} className="mt-5 space-y-3"><label className="block text-sm">Exam title<input name="title" required className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2" /></label><label className="block text-sm">Starts<input name="startsAt" type="datetime-local" required className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2" /></label><label className="block text-sm">Ends<input name="endsAt" type="datetime-local" required className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2" /></label><label className="block text-sm">Duration (minutes)<input name="durationMinutes" type="number" min="1" required className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2" /></label>{setupError && <p role="alert" className="text-sm text-rose-300">{setupError}</p>}<button disabled={setupBusy} className="rounded bg-cyan-500 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">{setupBusy ? 'Creating…' : 'Create exam'}</button></form>}<button onClick={onLogout} className="ml-3 rounded border border-slate-700 px-4 py-2 text-sm">Sign out</button></main></div>;
+    }
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
         <div className="bg-rose-950/40 border border-rose-800 p-6 rounded-xl text-center max-w-md">
@@ -64,7 +88,7 @@ export function CommandCenter() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans pb-12">
       
       {/* Header */}
-      <Header
+        <Header
         meta={meta}
         examStatus={examStatus}
         riskScore={riskScore}
@@ -106,6 +130,9 @@ export function CommandCenter() {
           activeScenario={scenarioKey}
           onSelectScenario={triggerScenario}
           isTransitioning={isTransitioning}
+          user={user}
+          onLogout={onLogout}
+          isLive={isLive}
         />
 
         {/* Top KPI Cards */}
