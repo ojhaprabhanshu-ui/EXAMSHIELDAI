@@ -88,12 +88,15 @@ export function CommandCenter({ user, accessToken, onLogout }) {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans pb-12">
       
       {/* Header */}
-        <Header
+      <Header
         meta={meta}
         examStatus={examStatus}
         riskScore={riskScore}
         activeScenarioName={examState?.name || scenarioKey}
         isTransitioning={isTransitioning}
+        user={user}
+        onLogout={onLogout}
+        isLive={isLive}
       />
 
       {/* Main Content Body */}

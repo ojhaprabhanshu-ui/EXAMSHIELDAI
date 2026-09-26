@@ -4,75 +4,123 @@ import { examService } from '../services/examService';
 
 export function useExamSimulation(accessToken) {
   const [activeScenarioKey, setActiveScenarioKey] = useState('NORMAL');
-  const [examState, setExamState] = useState(null);
+  const [examState, setExamState] = useState(SCENARIO_PRESETS.NORMAL);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const transitionTimerRef = useRef(null);
-  const [revision, setRevision] = useState(0);
 
-  const loadState = useCallback(async (scenarioKey) => {
+  const transitionTimerRef = useRef(null);
+
+  const loadState = useCallback(async (scenarioKey, token) => {
     try {
       setError(null);
-      const state = await examService.getExamState();
-      setExamState(state);
+      const preset = SCENARIO_PRESETS[scenarioKey] || SCENARIO_PRESETS.NORMAL;
+
+      // Handle multi-step animation for Network Degradation (Master Demo Step 5 & 6)
+      if (scenarioKey === 'NETWORK_DEGRADATION' && preset.stages && !token) {
+        setIsTransitioning(true);
+
+        setExamState({
+          ...preset,
+          ...preset.stages[0],
+        });
+
+        transitionTimerRef.current = setTimeout(() => {
+          setExamState((prev) => ({
+            ...prev,
+            ...preset.stages[1],
+            timeline: [...preset.timeline.slice(0, 2)],
+          }));
+
+          transitionTimerRef.current = setTimeout(() => {
+            setExamState((prev) => ({
+              ...prev,
+              ...preset.stages[2],
+              timeline: [...preset.timeline.slice(0, 3)],
+            }));
+
+            transitionTimerRef.current = setTimeout(() => {
+              setExamState(preset);
+              setIsTransitioning(false);
+            }, 800);
+
+          }, 800);
+
+        }, 600);
+
+      } else {
+        if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+        setIsTransitioning(false);
+        const data = await examService.getExamState(token);
+        setExamState(data);
+      }
     } catch (err) {
-      setError(err.message || 'Failed to load exam data');
+      console.warn('Load state warning:', err);
+      setExamState(SCENARIO_PRESETS[scenarioKey] || SCENARIO_PRESETS.NORMAL);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    let disposed = false;
-    setIsLoading(true);
+    let active = true;
     if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+
     if (accessToken) {
       examService.connectLive(accessToken)
-        .then((state) => { if (!disposed) { setExamState(state); setError(null); } })
-        .catch((err) => { if (!disposed) setError(err.code ? `${err.code}: ${err.message}` : (err.message || 'Unable to connect to the backend')); })
-        .finally(() => { if (!disposed) setIsLoading(false); });
+        .then((data) => {
+          if (active && data) setExamState(data);
+        })
+        .catch(() => {
+          if (active) setExamState(SCENARIO_PRESETS.NORMAL);
+        });
     } else {
       examService.disconnectLive();
-      examService.setScenario(activeScenarioKey).then(() => loadState(activeScenarioKey));
+      loadState(activeScenarioKey, null);
     }
-    const unsubscribe = examService.subscribe(() => setRevision((value) => value + 1));
-    return () => { disposed = true; unsubscribe(); if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current); };
-  }, [accessToken]);
 
-  useEffect(() => {
-    if (!accessToken || !examService.isLive() || !revision) return;
-    let disposed = false;
-    examService.getExamState().then((state) => { if (!disposed) setExamState(state); })
-      .catch((err) => { if (!disposed) setError(err.message); });
-    return () => { disposed = true; };
-  }, [accessToken, revision]);
+    const unsubscribe = examService.subscribe(() => {
+      if (active) loadState(activeScenarioKey, accessToken);
+    });
 
-  const triggerScenario = useCallback(async (scenarioKey) => {
-    if (!SCENARIO_PRESETS[scenarioKey]) return;
+    return () => {
+      active = false;
+      unsubscribe();
+      if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+    };
+  }, [accessToken, activeScenarioKey, loadState]);
+
+  const triggerScenario = useCallback((scenarioKey) => {
+    if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
     setActiveScenarioKey(scenarioKey);
-    setIsTransitioning(true);
-    try {
-      await examService.setScenario(scenarioKey);
-      if (!examService.isLive()) await loadState(scenarioKey);
-    } catch (err) {
-      setError(err.message || 'Unable to send telemetry');
-    } finally { setIsTransitioning(false); }
-  }, [loadState]);
+    examService.setScenario(scenarioKey);
+    loadState(scenarioKey, accessToken);
+  }, [accessToken, loadState]);
 
-  const openSessionDrillDown = useCallback((id) => setSelectedSessionId(id), []);
-  const closeSessionDrillDown = useCallback(() => setSelectedSessionId(null), []);
-  const selectedSession = examState?.sessions?.find((session) => session.id === selectedSessionId) || null;
+  const openSessionDrillDown = useCallback((sessionId) => {
+    setSelectedSessionId(sessionId);
+  }, []);
+
+  const closeSessionDrillDown = useCallback(() => {
+    setSelectedSessionId(null);
+  }, []);
+
+  const selectedSession = examState?.sessions?.find((s) => s.id === selectedSessionId) || null;
   const meta = examState?.examName ? { ...EXAM_METADATA, title: examState.examName, code: examState.code, semester: examState.semester } : EXAM_METADATA;
 
-  const retry = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const state = accessToken ? await examService.connectLive(accessToken) : await examService.getExamState();
-      setExamState(state); setError(null);
-    } catch (err) { setError(err.message); }
-    finally { setIsLoading(false); }
-  }, [accessToken]);
-  return { meta, scenarioKey: activeScenarioKey, examState, isTransitioning, isLoading, error, selectedSession, selectedSessionId, triggerScenario, openSessionDrillDown, closeSessionDrillDown, isLive: examService.isLive(), retry };
+  return {
+    meta,
+    scenarioKey: activeScenarioKey,
+    examState: examState || SCENARIO_PRESETS.NORMAL,
+    isTransitioning,
+    isLoading,
+    error,
+    selectedSession,
+    selectedSessionId,
+    triggerScenario,
+    openSessionDrillDown,
+    closeSessionDrillDown,
+    isLive: examService.isLive(),
+  };
 }

@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -35,7 +35,19 @@ let shuttingDown = false;
 function stopAll(exitCode = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
-  for (const child of children) if (child.exitCode === null) child.kill();
+  for (const child of children) {
+    if (child.pid && child.exitCode === null) {
+      if (process.platform === 'win32') {
+        try {
+          execSync(`taskkill /F /T /PID ${child.pid}`, { stdio: 'ignore' });
+        } catch (e) {
+          child.kill();
+        }
+      } else {
+        child.kill('SIGTERM');
+      }
+    }
+  }
   process.exitCode = exitCode;
 }
 

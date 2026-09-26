@@ -14,19 +14,10 @@ import { RecoveryWorker } from "./services/recovery-worker.js";
 import { persistQueuedSubmission, finalizeExamRecovery, beginRecoveryForActiveExams } from "./services/submission-store.js";
 
 const port = config.port;
-let app;
-const httpServer = createServer((req, res) => app(req, res));
-const io = new SocketServer(httpServer, {
-  transports: ["websocket", "polling"],
-  cors: {
-    origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Authorization", "Content-Type"],
-  },
-});
-installSocketSecurity(io);
+
 const queue = new ContinuityQueue();
 const continuity = new ContinuityRuntime(queue);
+
 const recoveryWorker = new RecoveryWorker({
   queue,
   submit: persistQueuedSubmission,
@@ -39,7 +30,35 @@ const recoveryWorker = new RecoveryWorker({
     await finalizeExamRecovery(item.examId, queue, io, continuity);
   },
 });
-app = createApp({ io, continuity });
+
+// Initialize Express App first
+const app = createApp({ io: null, continuity });
+
+const httpServer = createServer(app);
+
+const io = new SocketServer(httpServer, {
+  transports: ["websocket", "polling"],
+  cors: {
+    origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Authorization", "Content-Type"],
+  },
+});
+
+// Attach io instance to Express app locals
+app.locals.io = io;
+
+installSocketSecurity(io);
+
+httpServer.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`[Backend Error] Port ${port} is already in use by another process.`);
+    console.error(`Please terminate the process using port ${port} or set a different PORT environment variable.`);
+  } else {
+    console.error("[Backend Error]", err);
+  }
+  process.exit(1);
+});
 
 httpServer.listen(port, () => {
   console.log(`ExamShield backend listening on port ${port}.`);
