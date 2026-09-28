@@ -39,6 +39,9 @@ export function verifyAccessToken(token) {
 export function authenticateJwt(req, res, next) {
   if (req.path === "/health" && req.method === "GET") return next();
   if (req.path === "/auth/login" && req.method === "POST") return next();
+  // These endpoints accept only bounded, predefined demo scenarios and expose
+  // only synthetic telemetry/forensics, never exam or student records.
+  if ((req.path === "/ai/simulate" && req.method === "POST") || (req.path === "/ai/reports" && req.method === "GET")) return next();
   const match = /^Bearer\s+(.+)$/i.exec(req.get("authorization") ?? "");
   if (!match) return res.status(401).json({ error: "Bearer token required" });
   try {

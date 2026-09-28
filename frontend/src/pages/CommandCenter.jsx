@@ -1,4 +1,3 @@
-import React from 'react';
 import { useExamSimulation } from '../hooks/useExamSimulation';
 import { Header } from '../components/dashboard/Header';
 import { KpiCards } from '../components/dashboard/KpiCards';
@@ -11,8 +10,9 @@ import { IncidentTimeline } from '../components/incidents/IncidentTimeline';
 import { SessionDrillDownModal } from '../components/sessions/SessionDrillDownModal';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { AlertOctagon, ShieldAlert } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../services/apiClient';
+import { AiForensicsPanel } from '../components/dashboard/AiForensicsPanel';
 
 export function CommandCenter({ user, accessToken, onLogout }) {
   const {
@@ -31,6 +31,34 @@ export function CommandCenter({ user, accessToken, onLogout }) {
   } = useExamSimulation(accessToken);
   const [setupBusy, setSetupBusy] = useState(false);
   const [setupError, setSetupError] = useState('');
+  const [analysis, setAnalysis] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState('');
+  const analysisRequestRef = useRef(0);
+
+  const runAnalysis = useCallback(async (scenario) => {
+    const requestId = ++analysisRequestRef.current;
+    setAnalysisLoading(true);
+    setAnalysisError('');
+    try {
+      const result = await apiRequest('/ai/simulate', { method: 'POST', body: JSON.stringify({ scenario }) });
+      if (analysisRequestRef.current === requestId) setAnalysis(result);
+    } catch (err) {
+      if (analysisRequestRef.current === requestId) setAnalysisError(err.message || 'Could not reach the Python analysis service.');
+    } finally {
+      if (analysisRequestRef.current === requestId) setAnalysisLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void runAnalysis('NORMAL'); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [runAnalysis]);
+
+  function selectScenario(scenario) {
+    triggerScenario(scenario);
+    void runAnalysis(scenario);
+  }
 
   async function createFirstExam(event) {
     event.preventDefault();
@@ -81,8 +109,31 @@ export function CommandCenter({ user, accessToken, onLogout }) {
     chartData = [],
   } = examState || {};
 
-  const isCriticalExam = examStatus === 'CRITICAL';
-  const isAtRiskExam = examStatus === 'AT_RISK';
+  // Adapt the AI service response to the existing dashboard's KPI, chart,
+  // timeline, and regional-session data shapes.
+  let displayedState = examState;
+  if (analysis) {
+    const affected = analysis.forensics.affectedStudents;
+    const atRisk = analysis.centers.filter((center) => center.status === 'AT_RISK')
+      .reduce((total, center) => total + Math.min(center.students - center.affected, Math.max(1, Math.round(center.students * .18))), 0);
+    const metrics = analysis.metrics;
+    const timelineEntry = { id: analysis.id, time: new Date(analysis.generatedAt).toLocaleTimeString(), type: analysis.risk.status === 'CRITICAL' ? 'danger' : analysis.risk.status === 'AT_RISK' ? 'warning' : 'success', message: `${analysis.rootCause.classification}: risk ${analysis.risk.score}/100; ${affected} simulated candidates affected.` };
+    const point = { time: new Date(analysis.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), latency: metrics.latency_ms, packetLoss: metrics.packet_loss_pct, cpu: metrics.cpu_pct, users: metrics.active_students, loginFailures: metrics.login_failures, submissionFailures: metrics.submission_failures };
+    displayedState = {
+      ...examState,
+      examStatus: analysis.risk.status,
+      riskScore: analysis.risk.score,
+      erScore: Math.max(0, 100 - Math.round(analysis.risk.score * .42)),
+      students: { total: analysis.entityCount, affected, atRisk: Math.min(atRisk, analysis.entityCount - affected), normal: Math.max(0, analysis.entityCount - affected - atRisk) },
+      infrastructure: { latency: metrics.latency_ms, packetLoss: metrics.packet_loss_pct, cpu: metrics.cpu_pct, memory: metrics.memory_pct, concurrentUsers: metrics.concurrent_users, loginFailures: metrics.login_failures, submissionFailures: metrics.submission_failures, dbResponseTime: metrics.db_response_ms },
+      sessions: analysis.centers.map((center, index) => ({ id: `C${String(index + 1).padStart(2, '0')}`, center: `${center.name} Exam Center`, room: 'Regional sessions', students: center.students, status: center.status, riskScore: Math.min(100, Math.round(center.affected / Math.max(1, center.students) * 250)), latency: center.latency_ms, packetLoss: metrics.packet_loss_pct, loginFailures: Math.round(metrics.login_failures / analysis.centers.length), submissionFailures: Math.round(metrics.submission_failures / analysis.centers.length) })),
+      timeline: [...(examState?.timeline || []), timelineEntry],
+      chartData: [...(examState?.chartData || []).slice(-6), point],
+      name: analysis.scenario.replaceAll('_', ' '), badge: `${analysis.rootCause.classification} · ${analysis.anomaly.trend.toLowerCase()} risk trend`,
+    };
+  }
+  const shownExamStatus = displayedState?.examStatus ?? examStatus;
+  const shownRiskScore = displayedState?.riskScore ?? riskScore;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans pb-12">
@@ -90,9 +141,9 @@ export function CommandCenter({ user, accessToken, onLogout }) {
       {/* Header */}
       <Header
         meta={meta}
-        examStatus={examStatus}
-        riskScore={riskScore}
-        activeScenarioName={examState?.name || scenarioKey}
+        examStatus={shownExamStatus}
+        riskScore={shownRiskScore}
+        activeScenarioName={displayedState?.name || scenarioKey}
         isTransitioning={isTransitioning}
         user={user}
         onLogout={onLogout}
@@ -103,27 +154,27 @@ export function CommandCenter({ user, accessToken, onLogout }) {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
         
         {/* Critical/Risk Warning Banner */}
-        {(isCriticalExam || isAtRiskExam) && (
+        {(shownExamStatus === 'CRITICAL' || shownExamStatus === 'AT_RISK') && (
           <div
             className={`p-4 rounded-xl border flex items-center justify-between gap-3 animate-pulse shadow-lg ${
-              isCriticalExam
-                ? 'bg-rose-950/70 border-rose-500/80 text-rose-200'
+              shownExamStatus === 'CRITICAL'
+              ? 'bg-rose-950/70 border-rose-500/80 text-rose-200'
                 : 'bg-amber-950/70 border-amber-500/80 text-amber-200'
             }`}
           >
             <div className="flex items-center gap-3">
-              <ShieldAlert className={`w-6 h-6 shrink-0 ${isCriticalExam ? 'text-rose-400' : 'text-amber-400'}`} />
+              <ShieldAlert className={`w-6 h-6 shrink-0 ${shownExamStatus === 'CRITICAL' ? 'text-rose-400' : 'text-amber-400'}`} />
               <div>
                 <h4 className="text-sm font-bold uppercase tracking-wide">
-                  {isCriticalExam ? 'CRITICAL EXAM ANOMALY DETECTED' : 'EXAM TELEMETRY AT RISK'}
+                  {shownExamStatus === 'CRITICAL' ? 'CRITICAL EXAM ANOMALY DETECTED' : 'EXAM TELEMETRY AT RISK'}
                 </h4>
                 <p className="text-xs opacity-90 mt-0.5">
-                  {examState?.badge || 'Telemetry values exceed normal SLA tolerances. Review affected sessions below.'}
+                  {displayedState?.badge || 'Telemetry values exceed normal SLA tolerances. Review affected sessions below.'}
                 </p>
               </div>
             </div>
             <span className="text-xs font-mono font-bold bg-slate-950/80 px-3 py-1.5 rounded border border-slate-800 shrink-0">
-              Risk Score: {riskScore} / 100
+              Risk Score: {shownRiskScore} / 100
             </span>
           </div>
         )}
@@ -131,7 +182,7 @@ export function CommandCenter({ user, accessToken, onLogout }) {
         {/* Disaster Simulator Panel (Primary Day 1 Demo Requirement) */}
         <DisasterSimulator
           activeScenario={scenarioKey}
-          onSelectScenario={triggerScenario}
+          onSelectScenario={selectScenario}
           isTransitioning={isTransitioning}
           user={user}
           onLogout={onLogout}
@@ -139,25 +190,27 @@ export function CommandCenter({ user, accessToken, onLogout }) {
         />
 
         {/* Top KPI Cards */}
-        <KpiCards state={examState} />
+        <AiForensicsPanel analysis={analysis} loading={analysisLoading} error={analysisError} onRetry={() => runAnalysis(scenarioKey)} />
+
+        <KpiCards state={displayedState} />
 
         {/* Examination Resilience Score (ERS) */}
-        <ErssCard erScore={erScore} erBreakdown={erBreakdown} />
+        <ErssCard erScore={displayedState?.erScore ?? erScore} erBreakdown={displayedState?.erBreakdown ?? erBreakdown} />
 
         {/* Infrastructure Health Telemetry (7 Metrics) */}
-        <InfrastructureHealth infrastructure={infrastructure} />
+        <InfrastructureHealth infrastructure={displayedState?.infrastructure ?? infrastructure} />
 
         {/* Live Charts (Recharts) */}
-        <LiveCharts chartData={chartData} />
+        <LiveCharts chartData={displayedState?.chartData ?? chartData} />
 
         {/* Student Impact Map (Regional Centers / Rooms / Sessions) */}
         <StudentImpactMap
-          sessions={sessions}
+          sessions={displayedState?.sessions ?? sessions}
           onSelectSession={openSessionDrillDown}
         />
 
         {/* Incident Timeline Log */}
-        <IncidentTimeline timeline={timeline} />
+        <IncidentTimeline timeline={displayedState?.timeline ?? timeline} />
 
       </main>
 

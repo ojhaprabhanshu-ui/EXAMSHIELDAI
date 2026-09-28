@@ -1,7 +1,7 @@
 /**
  * ExamShield AI - Central Mock Data Registry
  * Represents official JSON contracts for Exam State, Infrastructure Telemetry, 
- * Sessions, and Incident Timeline across 5 Disaster Simulation scenarios.
+ * Sessions, and Incident Timeline across the Disaster Simulation scenarios.
  */
 
 export const EXAM_METADATA = {
@@ -330,6 +330,36 @@ export const SCENARIO_PRESETS = {
       { time: '10:25', latency: 50, packetLoss: 0.4, cpu: 56, users: 992, loginFailures: 2, submissionFailures: 3 },
       { time: '10:35', latency: 95, packetLoss: 0.6, cpu: 62, users: 990, loginFailures: 4, submissionFailures: 25 },
       { time: '10:41', latency: 185, packetLoss: 0.9, cpu: 68, users: 988, loginFailures: 8, submissionFailures: 62 },
+    ],
+  },
+
+  POWER_OUTAGE: {
+    id: 'POWER_OUTAGE',
+    name: 'Regional Power Outage',
+    badge: 'Center power and network availability loss',
+    examStatus: 'CRITICAL',
+    riskScore: 91,
+    continuityMode: true,
+    affectedStudents: 340,
+    erScore: 62,
+    students: { total: 1000, normal: 590, atRisk: 70, affected: 340 },
+    erBreakdown: { availability: 48, networkStability: 58, serverHealth: 91, submissionHealth: 54, recoveryPerformance: 68 },
+    infrastructure: { latency: 520, packetLoss: 16, cpu: 52, memory: 57, concurrentUsers: 710, loginFailures: 190, submissionFailures: 260, dbResponseTime: 290 },
+    sessions: BASELINE_SESSIONS.map((session, index) => index === 1 || index === 4 || index === 6
+      ? { ...session, status: 'AFFECTED', riskScore: 94, latency: 520, packetLoss: 16, submissionFailures: 32 }
+      : index === 2 || index === 5
+        ? { ...session, status: 'AT_RISK', riskScore: 72, latency: 190, packetLoss: 5.5, submissionFailures: 12 }
+        : session),
+    timeline: [
+      { id: 'p1', time: '10:42:00', type: 'warning', message: 'Power telemetry and site heartbeat dropped at three regional centers.' },
+      { id: 'p2', time: '10:42:30', type: 'danger', message: 'Connectivity loss and delayed submissions detected for affected sessions.' },
+      { id: 'p3', time: '10:43:00', type: 'danger', message: 'Continuity response recommended while center power is restored.' },
+    ],
+    chartData: [
+      { time: '10:30', latency: 48, packetLoss: 0.5, cpu: 54, users: 992, loginFailures: 2, submissionFailures: 1 },
+      { time: '10:35', latency: 120, packetLoss: 3.0, cpu: 53, users: 900, loginFailures: 45, submissionFailures: 58 },
+      { time: '10:40', latency: 320, packetLoss: 9.0, cpu: 52, users: 790, loginFailures: 120, submissionFailures: 180 },
+      { time: '10:43', latency: 520, packetLoss: 16, cpu: 52, users: 710, loginFailures: 190, submissionFailures: 260 },
     ],
   },
 };

@@ -7,3 +7,4 @@ export { Incident } from "./incident.js";
 export { RecoveryItem } from "./recovery-item.js";
 export { User } from "./user.js";
 export { Student } from "./student.js";
+export { AnalysisRun } from "./analysis-run.js";

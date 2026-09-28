@@ -1,4 +1,3 @@
-import React from 'react';
 import { Wifi, Radio, Cpu, HardDrive, Users, UserX, AlertOctagon } from 'lucide-react';
 import { StatusBadge } from '../common/StatusBadge';
 import { formatMs, formatPercent, formatNumber } from '../../utils/formatters';
@@ -97,7 +96,7 @@ export function InfrastructureHealth({ infrastructure = {} }) {
             Infrastructure Health Telemetry
           </h3>
         </div>
-        <span className="text-[11px] text-slate-400 font-mono shrink-0">REAL-TIME FEEDS</span>
+        <span className="text-[11px] text-amber-300 font-mono shrink-0">PYTHON SIMULATION</span>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 w-full">

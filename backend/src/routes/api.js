@@ -1,6 +1,6 @@
 import { Router } from "express";
 import mongoose from "mongoose";
-import { Exam, AuditEvent, Telemetry, StudentSession, Student, Incident } from "../models/index.js";
+import { Exam, AuditEvent, Telemetry, StudentSession, Student, Incident, AnalysisRun } from "../models/index.js";
 import { requireDatabase, requireRole } from "../middleware/access.js";
 import { transitionExam, EXAM_STATES } from "../domain/exam-state.js";
 import { emitExamEvent, REALTIME_EVENTS } from "../realtime/events.js";
@@ -9,6 +9,7 @@ import { finalizeExamRecovery } from "../services/submission-store.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
+import { analyzeScenario } from "../services/ai-service.js";
 
 export const apiRouter = Router();
 
@@ -20,6 +21,80 @@ const loginAttemptCleanup = setInterval(() => {
   for (const [ip, attempt] of loginAttempts) if (attempt.resetAt <= now) loginAttempts.delete(ip);
 }, LOGIN_WINDOW_MS);
 loginAttemptCleanup.unref?.();
+
+const demoRequests = new Map();
+const DEMO_SCENARIOS = new Set(["NORMAL", "NETWORK_DEGRADATION", "LOGIN_SPIKE", "SERVER_OVERLOAD", "DATABASE_SLOWDOWN", "POWER_OUTAGE"]);
+const demoRequestCleanup = setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of demoRequests) if (entry.resetAt <= now) demoRequests.delete(ip);
+}, 60_000);
+demoRequestCleanup.unref?.();
+
+apiRouter.post("/ai/simulate", async (req, res, next) => {
+  try {
+    const scenario = req.body?.scenario;
+    if (typeof scenario !== "string" || !DEMO_SCENARIOS.has(scenario)) return res.status(400).json({ error: "Unsupported simulation scenario" });
+    const now = Date.now();
+    const attempts = demoRequests.get(req.ip);
+    if (attempts?.resetAt > now && attempts.count >= 30) return res.status(429).json({ error: "Demo simulation rate limit reached; try again shortly" });
+    const current = attempts?.resetAt > now ? attempts : { count: 0, resetAt: now + 60_000 };
+    current.count += 1;
+    demoRequests.set(req.ip, current);
+
+    const report = await analyzeScenario(scenario);
+    let persisted = false;
+    if (req.app.locals.databaseReady?.()) {
+      try {
+        const session = await mongoose.startSession();
+        try {
+          await session.withTransaction(async () => {
+            await AnalysisRun.create([{
+              runId: report.id, scenario, entityCount: report.entityCount, riskScore: report.risk.score,
+              status: report.risk.status, rootCause: report.rootCause.classification,
+              affectedStudents: report.forensics.affectedStudents,
+              estimatedDowntimeMinutes: report.forensics.estimatedDowntimeMinutes, report,
+            }], { session });
+            const signalRows = Object.entries(report.metrics).map(([signalType, value]) => ({
+              observedAt: new Date(report.generatedAt), source: "python-telemetry-simulator", signalType,
+              value, unit: signalType.endsWith("_ms") ? "ms" : signalType.endsWith("_pct") ? "%" : signalType === "power_status" ? undefined : "count",
+              severity: report.risk.status === "CRITICAL" ? "CRITICAL" : report.risk.status === "AT_RISK" ? "HIGH" : "INFO",
+              riskScore: report.risk.score, metadata: { runId: report.id, scenario, simulated: true },
+            }));
+            await Telemetry.insertMany(signalRows, { ordered: true, session });
+            if (report.anomaly.detected) {
+              const duration = report.forensics.estimatedRecoveryMinutes;
+              await Incident.create([{
+                status: "RESOLVED", severity: report.risk.status === "CRITICAL" ? "CRITICAL" : "HIGH",
+                title: `${scenario.replaceAll("_", " ")} simulation`, summary: report.explanation,
+                reasonCodes: [report.rootCause.classification, `SIMULATION:${report.id}`],
+                openedAt: new Date(Date.now() - duration * 60_000), resolvedAt: new Date(),
+              }], { session });
+            }
+          });
+        } finally { await session.endSession(); }
+        persisted = true;
+      } catch (storageError) {
+        console.error("AI demo persistence failed", storageError.message);
+      }
+    }
+    return res.json({ ...report, persisted });
+  } catch (error) {
+    if (error.name === "AbortError") return res.status(503).json({ error: "AI analysis service timed out" });
+    return next(error);
+  }
+});
+
+apiRouter.get("/ai/reports", async (req, res, next) => {
+  try {
+    if (!req.app.locals.databaseReady?.()) return res.json({ reports: [], persisted: false });
+    const reports = await AnalysisRun.find({ mode: "SIMULATED" }).sort({ createdAt: -1 }).limit(20)
+      .select("runId scenario riskScore status rootCause affectedStudents estimatedDowntimeMinutes createdAt report")
+      .lean();
+    return res.json({ reports: reports.map((item) => ({ id: item.runId, scenario: item.scenario,
+      risk: { score: item.riskScore, status: item.status }, rootCause: { classification: item.rootCause },
+      forensics: item.report.forensics, generatedAt: item.createdAt })), persisted: true });
+  } catch (error) { return next(error); }
+});
 
 apiRouter.post("/auth/login", requireDatabase, async (req, res, next) => {
   try {

@@ -2,6 +2,8 @@
 
 This is the Express, Mongoose, and Socket.IO backend for ExamShield. It includes exam/student/session/telemetry/incident/recovery/audit schemas, state transition rules, a transaction-backed hash chain, JWT RBAC guards, and a bounded in-memory continuity queue with retry support.
 
+The root development launcher also starts the Python analysis service in `../ai_service`. The public, bounded demo endpoints `POST /api/ai/simulate` and `GET /api/ai/reports` bridge only predefined synthetic scenarios; if MongoDB is ready, each run, its aggregate telemetry signals, and an incident record are persisted together. Those demo routes do not expose live exam or student records. Set `AI_SERVICE_URL` to override the Python service URL.
+
 ## Current startup behavior
 
 Run `npm run dev` from this folder to start HTTP and Socket.IO on port 4000. Configure `MONGODB_URI` and `JWT_SECRET` in the local environment file; the backend does not provide fallback credentials. `GET /api/health` reports `503` until MongoDB is configured. Protected routes fail closed until a valid JWT is provided. Tokens must use HS256, issuer `examshield`, audience `examshield-api`, a Mongo ObjectId subject, and one of the supported roles. `JWT_SECRET` must be at least 32 bytes.

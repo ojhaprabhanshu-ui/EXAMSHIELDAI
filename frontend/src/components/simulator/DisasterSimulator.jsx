@@ -1,5 +1,4 @@
-import React from 'react';
-import { Zap, AlertTriangle, ShieldCheck, Server, Database, Users } from 'lucide-react';
+import { Zap, ShieldCheck, Server, Database, Users, BatteryWarning } from 'lucide-react';
 
 export function DisasterSimulator({ activeScenario, onSelectScenario, isTransitioning }) {
   const scenarios = [
@@ -43,6 +42,14 @@ export function DisasterSimulator({ activeScenario, onSelectScenario, isTransiti
       color: 'hover:border-blue-500 hover:bg-blue-950/40 text-blue-400',
       activeColor: 'bg-blue-950/80 border-blue-500 text-blue-300 ring-2 ring-blue-500/50',
     },
+    {
+      id: 'POWER_OUTAGE',
+      label: 'Power Outage',
+      description: 'Regional power and connectivity loss',
+      icon: BatteryWarning,
+      color: 'hover:border-orange-500 hover:bg-orange-950/40 text-orange-400',
+      activeColor: 'bg-orange-950/80 border-orange-500 text-orange-300 ring-2 ring-orange-500/50',
+    },
   ];
 
   return (
@@ -77,7 +84,7 @@ export function DisasterSimulator({ activeScenario, onSelectScenario, isTransiti
       </div>
 
       {/* Simulator Buttons Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         {scenarios.map((sc) => {
           const Icon = sc.icon;
           const isActive = activeScenario === sc.id;
