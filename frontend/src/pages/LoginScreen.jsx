@@ -31,7 +31,7 @@ export function LoginScreen({ onSignIn, onDemo }) {
           </div>
           <div>
             <h1 className="text-xl font-extrabold tracking-tight text-white">ExamShield AI</h1>
-            <p className="text-xs text-slate-400 font-medium">Command Center Operational Access</p>
+            <p className="text-xs text-slate-400 font-medium">Connect to protected live backend data</p>
           </div>
         </div>
 
@@ -73,7 +73,7 @@ export function LoginScreen({ onSignIn, onDemo }) {
             disabled={busy}
             className="w-full rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-extrabold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-60 cursor-pointer shadow-lg flex items-center justify-center gap-2"
           >
-            <span>{busy ? 'Authenticating…' : 'Sign In to Command Center'}</span>
+            <span>{busy ? 'Connecting…' : 'Connect to live backend'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>

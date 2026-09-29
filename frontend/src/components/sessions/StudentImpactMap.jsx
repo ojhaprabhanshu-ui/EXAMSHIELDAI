@@ -71,10 +71,12 @@ export function StudentImpactMap({ sessions = [], onSelectSession }) {
             : 'border-slate-800 bg-slate-950/60 hover:border-slate-700';
 
           return (
-            <div
+            <button
               key={session.id}
+              type="button"
+              aria-label={`Drill down into session ${session.id}`}
               onClick={() => onSelectSession(session.id)}
-              className={`p-4 rounded-xl border ${cardStyle} transition-all duration-200 cursor-pointer flex flex-col justify-between group shadow-md hover:scale-[1.02]`}
+              className={`w-full p-4 rounded-xl border ${cardStyle} transition-all duration-200 cursor-pointer flex flex-col justify-between group shadow-md hover:scale-[1.02] text-left`}
             >
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -109,7 +111,7 @@ export function StudentImpactMap({ sessions = [], onSelectSession }) {
                 <span>Drill Down</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </div>
-            </div>
+            </button>
           );
         })}
       </div>

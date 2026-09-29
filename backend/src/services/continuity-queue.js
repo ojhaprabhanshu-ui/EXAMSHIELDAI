@@ -65,8 +65,10 @@ export class ContinuityQueue {
     }
   }
 
-  counts(examId) {
-    const items = [...this.#items.values()].filter((item) => examId === undefined || item.examId === String(examId));
+  counts(examId, sessionId) {
+    const items = [...this.#items.values()].filter((item) =>
+      (examId === undefined || item.examId === String(examId))
+      && (sessionId === undefined || item.sessionId === String(sessionId)));
     return items.reduce((result, item) => {
       result[item.status] = (result[item.status] ?? 0) + 1;
       return result;

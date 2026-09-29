@@ -19,6 +19,8 @@ HTTP and Socket.IO allow the local Vite origins on ports 5173 and 4173. Socket.I
 - `GET /api/exams`
 - `POST /api/exams`
 - `GET /api/exams/:examId/dashboard`
+- `GET /api/exams/:examId/remediation/latest`
+- `POST /api/exams/:examId/remediation`
 - `GET /api/exams/:examId`
 - `POST /api/exams/:examId/state`
 - `POST /api/exams/:examId/telemetry`
@@ -28,3 +30,26 @@ HTTP and Socket.IO allow the local Vite origins on ports 5173 and 4173. Socket.I
 - `GET /api/audit/verify?stream=platform`
 
 State, telemetry, session-start, and recovery events are recorded with their related writes in MongoDB transactions. This requires MongoDB replica set or sharded-cluster transaction support. The in-memory queue preserves accepted submissions during an infrastructure outage, then flushes them into `RecoveryItem` and the student session after MongoDB reconnects. Queue contents are process-local and cannot survive a backend process restart while MongoDB is unavailable.
+
+### Local MongoDB setup on Windows
+
+If exam creation reports that database transactions are not enabled, the local MongoDB service is running as a standalone server. Run PowerShell as Administrator, add these two lines under the top-level settings in `C:\Program Files\MongoDB\Server\8.2\bin\mongod.cfg`, and restart the `MongoDB` service:
+
+```yaml
+replication:
+  replSetName: rs0
+```
+
+Then initialize the single-node replica set once:
+
+```powershell
+mongosh "mongodb://127.0.0.1:27017/?directConnection=true" --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"127.0.0.1:27017"}]})'
+```
+
+Add `replicaSet=rs0` to the backend `MONGODB_URI` query string (for example, `mongodb://127.0.0.1:27017/examshield?replicaSet=rs0`) and restart the backend. Existing database files are retained when enabling replica set mode.
+
+## Automatic remediation
+
+The backend selects playbooks only from the fixed registry in `src/services/auto-remediation.js`; model output is treated as diagnosis/evidence and never as an executable action. Every action, verification, rollback, success, failure, and escalation is appended to the audit hash chain. Remediation runs are stored in `RemediationRun` and broadcast as `remediation:updated`. Health verification uses the latest stored telemetry and blocks recovery while health thresholds fail or queue work remains. Demo health baselines are trusted only when the supplied simulation run ID matches a persisted simulated analysis with the same diagnosis.
+
+Actions that would require control of external network appliances, databases, or identity providers currently set application-level policy flags and preserve continuity; this backend does not execute infrastructure shell commands or claim that it changed external services. Unresolved checks roll back temporary policy flags and retain continuity/session protection while emitting `ADMIN_ESCALATION`.

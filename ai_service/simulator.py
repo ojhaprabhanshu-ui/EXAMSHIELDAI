@@ -5,10 +5,8 @@ downloading a model or third-party packages. Replace the simulator input with
 trusted monitoring-agent observations to use the same analysis pipeline live.
 """
 
-from collections import deque
 from datetime import datetime, timezone
 import math
-import random
 import uuid
 
 ENTITY_COUNT = 1000
@@ -21,7 +19,6 @@ SCENARIOS = {
     "DATABASE_SLOWDOWN": {"latency": 185, "packet_loss": .9, "login_failures": 20, "submission_failures": 170, "cpu": 68, "memory": 74, "db_response": 1450, "concurrency": 980, "availability": 94, "impact": .25, "downtime": 8, "recovery": 20},
     "POWER_OUTAGE": {"latency": 520, "packet_loss": 16, "login_failures": 190, "submission_failures": 260, "cpu": 52, "memory": 57, "db_response": 290, "concurrency": 710, "availability": 76, "impact": .34, "downtime": 22, "recovery": 38},
 }
-histories = {key: deque(maxlen=8) for key in SCENARIOS}
 
 
 def clamp(value, low=0, high=100):
@@ -44,29 +41,29 @@ def normalized_risks(m):
 
 def analyze(scenario):
     profile = SCENARIOS[scenario]
-    history = histories[scenario]
-    rng = random.Random(f"{scenario}:{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}")
-    # Simulate 1,000 independent candidates with small realistic variation.
+    # Scenario profiles are deliberately repeatable so a demo can be rehearsed
+    # and compared without random telemetry obscuring the response.
     entities = []
     for index in range(ENTITY_COUNT):
         center_index = min(len(CENTERS) - 1, index * len(CENTERS) // ENTITY_COUNT)
-        severity = clamp(rng.gauss(1, .13), .65, 1.45)
-        impacted = rng.random() < profile["impact"] * severity
+        impacted_count = 0 if scenario == "NORMAL" else round(ENTITY_COUNT * profile["impact"])
+        impacted = index < impacted_count
+        severity = .9 + (index % 21) / 100
         entities.append({"id": f"CAND-{index + 1:04d}", "center": CENTERS[center_index], "impacted": impacted,
-                         "latency": max(5, profile["latency"] * severity + rng.gauss(0, 10)),
+                         "latency": max(5, profile["latency"] * severity),
                          "risk": 0})
 
     impacted = sum(item["impacted"] for item in entities)
     metrics = {
-        "latency_ms": round(max(5, rng.gauss(profile["latency"], max(3, profile["latency"] * .035))), 1),
-        "packet_loss_pct": round(max(0, rng.gauss(profile["packet_loss"], max(.04, profile["packet_loss"] * .05))), 2),
-        "login_failures": max(0, round(rng.gauss(profile["login_failures"], max(1, profile["login_failures"] * .06)))),
-        "submission_failures": max(0, round(rng.gauss(profile["submission_failures"], max(1, profile["submission_failures"] * .06)))),
-        "cpu_pct": round(clamp(rng.gauss(profile["cpu"], 2)), 1),
-        "memory_pct": round(clamp(rng.gauss(profile["memory"], 2)), 1),
-        "db_response_ms": round(max(5, rng.gauss(profile["db_response"], max(2, profile["db_response"] * .04))), 1),
-        "concurrent_users": max(0, round(rng.gauss(profile["concurrency"], 15))),
-        "availability_pct": round(clamp(rng.gauss(profile["availability"], .2), 0, 100), 2),
+        "latency_ms": profile["latency"],
+        "packet_loss_pct": profile["packet_loss"],
+        "login_failures": profile["login_failures"],
+        "submission_failures": profile["submission_failures"],
+        "cpu_pct": profile["cpu"],
+        "memory_pct": profile["memory"],
+        "db_response_ms": profile["db_response"],
+        "concurrent_users": profile["concurrency"],
+        "availability_pct": profile["availability"],
         "registered_students": ENTITY_COUNT,
         "active_students": ENTITY_COUNT - (round(ENTITY_COUNT * .12) if scenario == "POWER_OUTAGE" else 0),
         "power_status": "OUTAGE" if scenario == "POWER_OUTAGE" else "STABLE",
@@ -77,11 +74,9 @@ def analyze(scenario):
     raw = sum(parts[key] * weights[key] for key in weights)
     # A serious single signal must not disappear in a weighted average.
     current_score = round(max(raw, max(parts.values()) * .90))
-    previous = list(history)
-    moving_average = round(sum(previous[-5:] + [current_score]) / (len(previous[-5:]) + 1))
-    trend = "RISING" if previous and current_score > previous[-1] + 4 else "FALLING" if previous and current_score < previous[-1] - 4 else "STABLE"
-    score = round(clamp(current_score * .78 + moving_average * .22))
-    history.append(score)
+    moving_average = current_score
+    trend = "STABLE"
+    score = current_score
     status = "CRITICAL" if score >= 75 else "AT_RISK" if score >= 45 else "NORMAL"
 
     evidence = []
@@ -103,6 +98,8 @@ def analyze(scenario):
     if not evidence:
         root_cause = "No significant incident"
         cause_evidence = ["Signals remain inside the configured baseline envelope."]
+    elif scenario == "POWER_OUTAGE":
+        root_cause, _, cause_evidence = next(entry for entry in evidence if entry[0] == "Power loss at an exam center")
     else:
         root_cause, _, cause_evidence = max(evidence, key=lambda entry: entry[1])
 
@@ -114,7 +111,7 @@ def analyze(scenario):
         "Power loss at an exam center": ["Switch the center to UPS or generator power and confirm its power telemetry.", "Keep encrypted local submission buffers and synchronize when connectivity returns."],
         "No significant incident": ["Continue monitoring heartbeat, network, server, database, and submission signals."],
     }[root_cause]
-    trajectory = [{"sample": i + 1, "risk": value} for i, value in enumerate(previous[-5:] + [score])]
+    trajectory = [{"sample": 1, "risk": score}]
     centers = []
     for center in CENTERS:
         rows = [item for item in entities if item["center"] == center]
@@ -128,6 +125,14 @@ def analyze(scenario):
                   f"Risk is {score}/100 ({status.lower()}) and the recent trajectory is {trend.lower()}. "
                   f"{impacted} of {ENTITY_COUNT} simulated students are affected. Evidence: " + "; ".join(cause_evidence))
     downtime = profile["downtime"] if impacted else 0
+    action_by_cause = {
+        "Network degradation": "ACTIVATE_CONTINUITY",
+        "Server overload": "ACTIVATE_CONTINUITY",
+        "Database slowdown": "ACTIVATE_CONTINUITY",
+        "Authentication surge": "AUTH_RECOVERY",
+        "Power loss at an exam center": "ACTIVATE_CONTINUITY",
+        "No significant incident": "MONITOR",
+    }
     return {
         "id": run_id, "generatedAt": generated_at, "mode": "SIMULATED", "scenario": scenario,
         "entityCount": ENTITY_COUNT, "metrics": metrics,
@@ -135,6 +140,14 @@ def analyze(scenario):
         "risk": {"score": score, "currentScore": current_score, "status": status, "trajectory": trajectory},
         "rootCause": {"classification": root_cause, "confidence": round(max(e[1] for e in evidence) if evidence else 0), "evidence": cause_evidence},
         "explanation": explanation, "recommendations": recommendations,
+        "prediction": {
+            "riskScore": score,
+            "status": "CRITICAL" if score >= 75 else "AT_RISK" if score >= 45 else "NORMAL",
+            "rootCause": root_cause,
+            "confidence": round(max(e[1] for e in evidence) / 100, 2) if evidence else 0,
+            "evidence": cause_evidence,
+            "recommendedAction": action_by_cause[root_cause],
+        },
         "centers": centers,
         "forensics": {"affectedStudents": impacted, "totalStudents": ENTITY_COUNT,
                       "estimatedDowntimeMinutes": downtime, "estimatedRecoveryMinutes": profile["recovery"] if impacted else 0,

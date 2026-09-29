@@ -3,10 +3,12 @@ import { Exam } from "../models/exam.js";
 
 export const REALTIME_EVENTS = Object.freeze({
   RISK_UPDATED: "exam:risk-updated",
+  TELEMETRY_RECORDED: "exam:telemetry-recorded",
   STATE_CHANGED: "exam:state-changed",
   CONTINUITY_UPDATED: "exam:continuity-updated",
   SUBMISSION_RECOVERED: "continuity:submission-recovered",
   SUBMISSION_RETRY: "continuity:submission-retry",
+  REMEDIATION_UPDATED: "remediation:updated",
 });
 
 export function examRoom(examId) {

@@ -2,13 +2,13 @@ import React from 'react';
 import { Activity, Server, Wifi, FileCheck, RefreshCw, CheckCircle } from 'lucide-react';
 import { formatPercent } from '../../utils/formatters';
 
-export function ErssCard({ erScore = 95, erBreakdown = {} }) {
+export function ErssCard({ erScore, erBreakdown = {} }) {
   const {
-    availability = 98,
-    networkStability = 94,
-    serverHealth = 91,
-    submissionHealth = 97,
-    recoveryPerformance = 95,
+    availability,
+    networkStability,
+    serverHealth,
+    submissionHealth,
+    recoveryPerformance,
   } = erBreakdown;
 
   const metrics = [
@@ -22,7 +22,8 @@ export function ErssCard({ erScore = 95, erBreakdown = {} }) {
   // Calculate SVG circle properties
   const radius = 38;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (erScore / 100) * circumference;
+  const scoreAvailable = Number.isFinite(erScore);
+  const strokeDashoffset = circumference - ((scoreAvailable ? erScore : 0) / 100) * circumference;
 
   const getScoreColor = (score) => {
     if (score >= 90) return { stroke: '#10b981', text: 'text-emerald-400', label: 'EXCELLENT RESILIENCE' };
@@ -30,7 +31,7 @@ export function ErssCard({ erScore = 95, erBreakdown = {} }) {
     return { stroke: '#f43f5e', text: 'text-rose-400', label: 'RESILIENCE CRITICAL' };
   };
 
-  const scoreTheme = getScoreColor(erScore);
+  const scoreTheme = scoreAvailable ? getScoreColor(erScore) : { stroke: '#475569', text: 'text-slate-400', label: 'AWAITING LIVE TELEMETRY' };
 
   return (
     <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col justify-between">
@@ -76,7 +77,7 @@ export function ErssCard({ erScore = 95, erBreakdown = {} }) {
 
             <div className="absolute flex flex-col items-center justify-center text-center">
               <span className={`text-2xl font-black font-mono tracking-tight ${scoreTheme.text}`}>
-                {erScore}
+                {scoreAvailable ? erScore : '—'}
               </span>
               <span className="text-[10px] font-semibold text-slate-400">OUT OF 100</span>
             </div>
@@ -102,13 +103,13 @@ export function ErssCard({ erScore = 95, erBreakdown = {} }) {
                     {m.label}
                   </span>
                   <span className={`font-mono font-bold ${textColor}`}>
-                    {formatPercent(m.value)}
+                    {Number.isFinite(m.value) ? formatPercent(m.value) : '—'}
                   </span>
                 </div>
                 <div className="w-full bg-slate-800/80 rounded-full h-2 overflow-hidden">
                   <div
                     className={`h-full ${barColor} transition-all duration-500 rounded-full`}
-                    style={{ width: `${Math.min(100, Math.max(0, m.value))}%` }}
+                    style={{ width: `${Number.isFinite(m.value) ? Math.min(100, Math.max(0, m.value)) : 0}%` }}
                   />
                 </div>
               </div>

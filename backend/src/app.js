@@ -19,6 +19,13 @@ export function createApp({ io, continuity } = {}) {
   app.use((req, res) => res.status(404).json({ error: "Not found" }));
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
+    const transactionUnsupported = error?.code === 20
+      || error?.codeName === "IllegalOperation"
+      || /transaction numbers are only allowed on a replica set member|transactions? are not supported by this deployment/i.test(error?.message ?? "");
+    if (transactionUnsupported) {
+      console.error("MongoDB transaction support is required for this operation. Configure the database as a replica set or use a transaction-capable cluster.");
+      return res.status(503).json({ error: "Database transaction support is not enabled. Configure MongoDB as a replica set, then restart the backend." });
+    }
     const status = Number.isInteger(error.status) ? error.status : 500;
     if (status >= 500) console.error("Request failed", { message: error.message, path: req.path });
     return res.status(status).json({ error: status >= 500 ? "Internal server error" : error.message });

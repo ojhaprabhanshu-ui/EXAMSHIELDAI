@@ -1,6 +1,6 @@
 import { Zap, ShieldCheck, Server, Database, Users, BatteryWarning } from 'lucide-react';
 
-export function DisasterSimulator({ activeScenario, onSelectScenario, isTransitioning }) {
+export function DisasterSimulator({ activeScenario, onSelectScenario, isTransitioning, isLive = false, targetSessionId = null, onReset }) {
   const scenarios = [
     {
       id: 'NORMAL',
@@ -65,13 +65,14 @@ export function DisasterSimulator({ activeScenario, onSelectScenario, isTransiti
             <h3 className="text-base font-extrabold text-slate-100 tracking-wide uppercase">
               Disaster Simulator (Day 1 Operational Control)
             </h3>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800/80">
-              DEMO MODE
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${isLive ? 'bg-emerald-950 text-emerald-300 border-emerald-800/80' : 'bg-amber-950 text-amber-300 border-amber-800/80'}`}>
+              {isLive ? 'LIVE BACKEND' : 'DEMO MODE'}
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
             Trigger real-time telemetry anomalies to test command center resilience visualizations.
           </p>
+          {isLive && <p className="mt-1 text-[11px] text-cyan-300">Scenario target: {targetSessionId ? `Session ${String(targetSessionId).slice(-6)}` : 'No active session'}</p>}
         </div>
 
         {/* Active Scenario Indicator */}
@@ -122,6 +123,8 @@ export function DisasterSimulator({ activeScenario, onSelectScenario, isTransiti
           );
         })}
       </div>
+
+      {!isLive && <div className="mt-3 flex items-center justify-between gap-3"><p className="text-[11px] text-slate-500">Local demo engine · one shared telemetry tick per second</p><button type="button" onClick={onReset} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-cyan-500 hover:text-cyan-200">Reset Scenario</button></div>}
     </div>
   );
 }

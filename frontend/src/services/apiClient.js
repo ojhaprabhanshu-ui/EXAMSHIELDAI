@@ -12,7 +12,8 @@ export async function apiRequest(path, options = {}) {
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 
-  const response = await fetch(`/api${path}`, { ...options, headers });
+  const apiUrl = import.meta.env.VITE_API_URL || '';
+  const response = await fetch(`${apiUrl}/api${path}`, { ...options, headers });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(payload.error || `Backend request failed (${response.status})`);
@@ -23,7 +24,7 @@ export async function apiRequest(path, options = {}) {
 }
 
 export function createExamSocket(token) {
-  return io('/', {
+  return io(import.meta.env.VITE_SOCKET_URL || '/', {
     path: '/socket.io',
     transports: ['websocket', 'polling'],
     auth: { token },

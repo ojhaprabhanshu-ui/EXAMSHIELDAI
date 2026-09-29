@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Shield, Activity, Clock, Zap, AlertTriangle } from 'lucide-react';
 import { StatusBadge } from '../common/StatusBadge';
 
-export function Header({ meta, examStatus, riskScore, activeScenarioName, isTransitioning, user, onLogout, isLive }) {
+export function Header({ meta, examStatus, riskScore, activeScenarioName, isTransitioning, user, onLogout, onConnectLive, isLive }) {
   const [timeStr, setTimeStr] = useState('');
 
   useEffect(() => {
@@ -57,12 +57,12 @@ export function Header({ meta, examStatus, riskScore, activeScenarioName, isTran
           <div className="flex items-center justify-between lg:justify-end gap-4">
             
             {/* Live Indicator */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-800/40 text-xs">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs ${isLive ? 'bg-emerald-950/40 border-emerald-800/40' : 'bg-cyan-950/40 border-cyan-800/40'}`}>
               <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isLive ? 'bg-emerald-400' : 'bg-cyan-400'}`}></span>
+                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isLive ? 'bg-emerald-500' : 'bg-cyan-500'}`}></span>
               </span>
-              <span className="font-semibold text-emerald-400 tracking-wider uppercase">LIVE STREAM</span>
+              <span className={`font-semibold tracking-wider uppercase ${isLive ? 'text-emerald-400' : 'text-cyan-300'}`}>{isLive ? 'LIVE STREAM' : 'LOCAL SIMULATION'}</span>
             </div>
 
             {/* Current Status Badge */}
@@ -75,7 +75,8 @@ export function Header({ meta, examStatus, riskScore, activeScenarioName, isTran
               <Clock className="w-3.5 h-3.5 text-cyan-400" />
               <span>{timeStr || '10:32:45'}</span>
             </div>
-            {user && <div className="flex items-center gap-2 text-xs text-slate-300"><span>{user.displayName || user.email}</span><button onClick={onLogout} className="rounded border border-slate-700 px-2.5 py-1.5 hover:border-cyan-500 hover:text-white">Sign out</button></div>}
+            {user?.role === 'Demo' && onConnectLive && <button onClick={onConnectLive} className="rounded border border-cyan-700 px-2.5 py-1.5 text-xs text-cyan-200 hover:border-cyan-400 hover:text-white">Connect live data</button>}
+            {user && user.role !== 'Demo' && <div className="flex items-center gap-2 text-xs text-slate-300"><span>{user.displayName || user.email}</span>{onLogout && <button onClick={onLogout} className="rounded border border-slate-700 px-2.5 py-1.5 hover:border-cyan-500 hover:text-white">Sign out</button>}</div>}
           </div>
 
         </div>

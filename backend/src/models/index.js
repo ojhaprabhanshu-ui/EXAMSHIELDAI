@@ -8,3 +8,4 @@ export { RecoveryItem } from "./recovery-item.js";
 export { User } from "./user.js";
 export { Student } from "./student.js";
 export { AnalysisRun } from "./analysis-run.js";
+export { RemediationRun } from "./remediation-run.js";

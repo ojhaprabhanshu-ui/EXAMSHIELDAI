@@ -49,6 +49,8 @@ function fallbackAnalysis(scenario) {
             : ["Signals remain inside the configured baseline envelope."];
   const affected = powerOutage ? 340 : (preset.affectedStudents || 0);
   const recommendations = ACTIONS[rootCause];
+  const recommendedAction = rootCause === "No significant incident" ? "MONITOR"
+    : rootCause === "Authentication surge" ? "AUTH_RECOVERY" : "ACTIVATE_CONTINUITY";
   const centers = (preset.sessions || BASELINE_SESSIONS).slice(0, 8).map((session, index) => ({
     name: String(session.center || BASELINE_SESSIONS[index]?.center || `Center ${index + 1}`).replace(/ Center$/, ""),
     students: session.students || 125,
@@ -63,6 +65,7 @@ function fallbackAnalysis(scenario) {
     anomaly: { detected: score >= 45, status, signals: {}, movingAverage: Math.round(riskHistory.reduce((sum, n) => sum + n, 0) / riskHistory.length), trend: "STABLE" },
     risk: { score, currentScore: score, status, trajectory: riskHistory.map((risk, index) => ({ sample: index + 1, risk })) },
     rootCause: { classification: rootCause, confidence: scenario === "NORMAL" ? 0 : 84, evidence: causeEvidence },
+    prediction: { riskScore: score, status, rootCause, confidence: scenario === "NORMAL" ? 0 : 0.84, evidence: causeEvidence, recommendedAction },
     explanation, recommendations, centers,
     forensics: { affectedStudents: affected, totalStudents: 1000, estimatedDowntimeMinutes: affected ? (powerOutage ? 22 : scenario === "NETWORK_DEGRADATION" ? 11 : scenario === "SERVER_OVERLOAD" ? 16 : scenario === "DATABASE_SLOWDOWN" ? 8 : 3) : 0,
       estimatedRecoveryMinutes: affected ? (powerOutage ? 38 : 18) : 0, successfulRecoveries: affected, recoveryRatePct: 100,

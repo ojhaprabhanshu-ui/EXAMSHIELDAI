@@ -2,19 +2,20 @@ import { Wifi, Radio, Cpu, HardDrive, Users, UserX, AlertOctagon } from 'lucide-
 import { StatusBadge } from '../common/StatusBadge';
 import { formatMs, formatPercent, formatNumber } from '../../utils/formatters';
 
-export function InfrastructureHealth({ infrastructure = {} }) {
+export function InfrastructureHealth({ infrastructure = {}, isLive = false }) {
   const {
-    latency = 48,
-    packetLoss = 0.5,
-    cpu = 54,
-    memory = 42,
-    concurrentUsers = 992,
-    loginFailures = 2,
-    submissionFailures = 1,
+    latency,
+    packetLoss,
+    cpu,
+    memory,
+    concurrentUsers,
+    loginFailures,
+    submissionFailures,
   } = infrastructure;
 
   // Evaluate status rules for metrics
   const getMetricStatus = (key, val) => {
+    if (!Number.isFinite(Number(val))) return 'UNKNOWN';
     switch (key) {
       case 'latency':
         return val > 200 ? 'CRITICAL' : val > 100 ? 'WARNING' : 'NORMAL';
@@ -39,49 +40,49 @@ export function InfrastructureHealth({ infrastructure = {} }) {
     {
       key: 'latency',
       label: 'Network Latency',
-      valDisplay: formatMs(latency),
+      valDisplay: latency === undefined ? '—' : formatMs(latency),
       status: getMetricStatus('latency', latency),
       icon: Wifi,
     },
     {
       key: 'packetLoss',
       label: 'Packet Loss',
-      valDisplay: formatPercent(packetLoss),
+      valDisplay: packetLoss === undefined ? '—' : formatPercent(packetLoss),
       status: getMetricStatus('packetLoss', packetLoss),
       icon: Radio,
     },
     {
       key: 'cpu',
       label: 'CPU Usage',
-      valDisplay: formatPercent(cpu),
+      valDisplay: cpu === undefined ? '—' : formatPercent(cpu),
       status: getMetricStatus('cpu', cpu),
       icon: Cpu,
     },
     {
       key: 'memory',
       label: 'Memory Usage',
-      valDisplay: formatPercent(memory),
+      valDisplay: memory === undefined ? '—' : formatPercent(memory),
       status: getMetricStatus('memory', memory),
       icon: HardDrive,
     },
     {
       key: 'concurrentUsers',
       label: 'Concurrent Users',
-      valDisplay: formatNumber(concurrentUsers),
+      valDisplay: concurrentUsers === undefined ? '—' : formatNumber(concurrentUsers),
       status: getMetricStatus('concurrentUsers', concurrentUsers),
       icon: Users,
     },
     {
       key: 'loginFailures',
       label: 'Login Failures',
-      valDisplay: formatNumber(loginFailures),
+      valDisplay: loginFailures === undefined ? '—' : formatNumber(loginFailures),
       status: getMetricStatus('loginFailures', loginFailures),
       icon: UserX,
     },
     {
       key: 'submissionFailures',
       label: 'Submission Failures',
-      valDisplay: formatNumber(submissionFailures),
+      valDisplay: submissionFailures === undefined ? '—' : formatNumber(submissionFailures),
       status: getMetricStatus('submissionFailures', submissionFailures),
       icon: AlertOctagon,
     },
@@ -96,7 +97,7 @@ export function InfrastructureHealth({ infrastructure = {} }) {
             Infrastructure Health Telemetry
           </h3>
         </div>
-        <span className="text-[11px] text-amber-300 font-mono shrink-0">PYTHON SIMULATION</span>
+        <span className="text-[11px] text-amber-300 font-mono shrink-0">{isLive ? 'LIVE SESSION TELEMETRY' : 'DETERMINISTIC DEMO DATA'}</span>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 w-full">

@@ -47,6 +47,7 @@ const io = new SocketServer(httpServer, {
 
 // Attach io instance to Express app locals
 app.locals.io = io;
+app.locals.recoveryWorker = recoveryWorker;
 
 installSocketSecurity(io);
 

@@ -39,7 +39,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    host = os.environ.get("AI_SERVICE_HOST", "127.0.0.1")
-    port = int(os.environ.get("AI_SERVICE_PORT", "8001"))
+    # Hosted web services must bind to all interfaces and honor the platform port.
+    host = os.environ.get("AI_SERVICE_HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", os.environ.get("AI_SERVICE_PORT", "8001")))
     print(f"ExamShield AI service listening on {host}:{port}")
     ThreadingHTTPServer((host, port), Handler).serve_forever()

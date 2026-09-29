@@ -1,12 +1,20 @@
-const ALLOWED_ORIGINS = new Set([
+const LOCAL_ORIGINS = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "http://localhost:4173",
   "http://127.0.0.1:4173",
-]);
+];
+
+function allowedOrigins() {
+  const configured = (process.env.CORS_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  return new Set([...LOCAL_ORIGINS, ...configured]);
+}
 
 export function isAllowedOrigin(origin) {
-  return !origin || ALLOWED_ORIGINS.has(origin);
+  return !origin || allowedOrigins().has(origin.replace(/\/$/, ""));
 }
 
 export function corsMiddleware(req, res, next) {

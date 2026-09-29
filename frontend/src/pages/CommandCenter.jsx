@@ -13,8 +13,9 @@ import { AlertOctagon, ShieldAlert } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../services/apiClient';
 import { AiForensicsPanel } from '../components/dashboard/AiForensicsPanel';
+import { AutoRemediationPanel } from '../components/dashboard/AutoRemediationPanel';
 
-export function CommandCenter({ user, accessToken, onLogout }) {
+export function CommandCenter({ user, accessToken, onLogout, onConnectLive }) {
   const {
     meta,
     scenarioKey,
@@ -23,7 +24,9 @@ export function CommandCenter({ user, accessToken, onLogout }) {
     isLoading,
     error,
     selectedSession,
+    scenarioTargetSessionId,
     triggerScenario,
+    resetScenario,
     openSessionDrillDown,
     closeSessionDrillDown,
     isLive,
@@ -50,14 +53,19 @@ export function CommandCenter({ user, accessToken, onLogout }) {
     }
   }, []);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => { void runAnalysis('NORMAL'); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [runAnalysis]);
-
-  function selectScenario(scenario) {
-    triggerScenario(scenario);
-    void runAnalysis(scenario);
+  async function selectScenario(scenario) {
+    try {
+      if (accessToken) {
+        const result = await triggerScenario(scenario);
+        if (result) setAnalysis(result);
+        return;
+      }
+      await triggerScenario(scenario);
+      setAnalysis(null);
+      setAnalysisError('');
+    } catch (err) {
+      setAnalysisError(err.message || 'Scenario could not be applied to the backend.');
+    }
   }
 
   async function createFirstExam(event) {
@@ -109,29 +117,8 @@ export function CommandCenter({ user, accessToken, onLogout }) {
     chartData = [],
   } = examState || {};
 
-  // Adapt the AI service response to the existing dashboard's KPI, chart,
-  // timeline, and regional-session data shapes.
-  let displayedState = examState;
-  if (analysis) {
-    const affected = analysis.forensics.affectedStudents;
-    const atRisk = analysis.centers.filter((center) => center.status === 'AT_RISK')
-      .reduce((total, center) => total + Math.min(center.students - center.affected, Math.max(1, Math.round(center.students * .18))), 0);
-    const metrics = analysis.metrics;
-    const timelineEntry = { id: analysis.id, time: new Date(analysis.generatedAt).toLocaleTimeString(), type: analysis.risk.status === 'CRITICAL' ? 'danger' : analysis.risk.status === 'AT_RISK' ? 'warning' : 'success', message: `${analysis.rootCause.classification}: risk ${analysis.risk.score}/100; ${affected} simulated candidates affected.` };
-    const point = { time: new Date(analysis.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), latency: metrics.latency_ms, packetLoss: metrics.packet_loss_pct, cpu: metrics.cpu_pct, users: metrics.active_students, loginFailures: metrics.login_failures, submissionFailures: metrics.submission_failures };
-    displayedState = {
-      ...examState,
-      examStatus: analysis.risk.status,
-      riskScore: analysis.risk.score,
-      erScore: Math.max(0, 100 - Math.round(analysis.risk.score * .42)),
-      students: { total: analysis.entityCount, affected, atRisk: Math.min(atRisk, analysis.entityCount - affected), normal: Math.max(0, analysis.entityCount - affected - atRisk) },
-      infrastructure: { latency: metrics.latency_ms, packetLoss: metrics.packet_loss_pct, cpu: metrics.cpu_pct, memory: metrics.memory_pct, concurrentUsers: metrics.concurrent_users, loginFailures: metrics.login_failures, submissionFailures: metrics.submission_failures, dbResponseTime: metrics.db_response_ms },
-      sessions: analysis.centers.map((center, index) => ({ id: `C${String(index + 1).padStart(2, '0')}`, center: `${center.name} Exam Center`, room: 'Regional sessions', students: center.students, status: center.status, riskScore: Math.min(100, Math.round(center.affected / Math.max(1, center.students) * 250)), latency: center.latency_ms, packetLoss: metrics.packet_loss_pct, loginFailures: Math.round(metrics.login_failures / analysis.centers.length), submissionFailures: Math.round(metrics.submission_failures / analysis.centers.length) })),
-      timeline: [...(examState?.timeline || []), timelineEntry],
-      chartData: [...(examState?.chartData || []).slice(-6), point],
-      name: analysis.scenario.replaceAll('_', ' '), badge: `${analysis.rootCause.classification} · ${analysis.anomaly.trend.toLowerCase()} risk trend`,
-    };
-  }
+  const displayedState = examState;
+  const currentAnalysis = isLive ? analysis : displayedState?.analysis;
   const shownExamStatus = displayedState?.examStatus ?? examStatus;
   const shownRiskScore = displayedState?.riskScore ?? riskScore;
 
@@ -147,6 +134,7 @@ export function CommandCenter({ user, accessToken, onLogout }) {
         isTransitioning={isTransitioning}
         user={user}
         onLogout={onLogout}
+        onConnectLive={onConnectLive}
         isLive={isLive}
       />
 
@@ -187,10 +175,17 @@ export function CommandCenter({ user, accessToken, onLogout }) {
           user={user}
           onLogout={onLogout}
           isLive={isLive}
+          targetSessionId={scenarioTargetSessionId}
+          onReset={resetScenario}
         />
 
         {/* Top KPI Cards */}
-        <AiForensicsPanel analysis={analysis} loading={analysisLoading} error={analysisError} onRetry={() => runAnalysis(scenarioKey)} />
+        <AutoRemediationPanel
+          remediation={currentAnalysis?.remediation || displayedState?.remediation}
+          pendingSubmissions={displayedState?.pendingSubmissions ?? 0}
+          recoveredSubmissions={displayedState?.recoveredSubmissions ?? 0}
+        />
+        <AiForensicsPanel analysis={currentAnalysis} loading={isLive && analysisLoading} error={isLive ? analysisError : ''} onRetry={() => { if (isLive) void runAnalysis(scenarioKey); }} />
 
         <KpiCards state={displayedState} />
 
@@ -198,7 +193,7 @@ export function CommandCenter({ user, accessToken, onLogout }) {
         <ErssCard erScore={displayedState?.erScore ?? erScore} erBreakdown={displayedState?.erBreakdown ?? erBreakdown} />
 
         {/* Infrastructure Health Telemetry (7 Metrics) */}
-        <InfrastructureHealth infrastructure={displayedState?.infrastructure ?? infrastructure} />
+        <InfrastructureHealth infrastructure={displayedState?.infrastructure ?? infrastructure} isLive={isLive} />
 
         {/* Live Charts (Recharts) */}
         <LiveCharts chartData={displayedState?.chartData ?? chartData} />
